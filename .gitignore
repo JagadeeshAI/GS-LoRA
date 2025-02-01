@@ -1,4 +1,3 @@
-data/
 eval/
 
 __pycache__/
@@ -18,7 +17,6 @@ log/
 *.txt
 !requirements.txt
 
-results/
 __pycache__/
 wandb/
 scripts/run.sh
