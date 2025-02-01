@@ -148,7 +148,7 @@ def parse_arguments(argv):
     parser = argparse.ArgumentParser()
     parser.add_argument(
         "--model",
-        default="/results/ViT-P8S8_casia100_cosface_s1-1200-150de-depth6/Backbone_VIT_Epoch_1110_Batch_82100_Time_2023-10-18-18-22_checkpoint.pth",
+        default="/results/ViT-P8S8_casia100_cosface_s1-1200-150de-depth6/Backbone_VIT_Epoch_1185_Batch_45020_Time_2024-09-26-03-26_checkpoint.pth",
         help="pretrained model",
     )
     parser.add_argument("--network", default="VIT", help="training set directory")
