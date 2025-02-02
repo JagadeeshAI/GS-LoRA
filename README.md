@@ -179,3 +179,9 @@ This work is built upon the [zhongyy/Face-Transformer: Face Transformer for Reco
 ## License
 
 This project is released under the [MIT License](https://github.com/bjzhb666/GS-LoRA/blob/master/LICENSE).
+
+
+For localy please do this thigs
+1.conda activate gslora2
+2.export PYTHONPATH="$PYTHONPATH:/media/jagadeesh/New Volume/Jagadeesh/GS-LoRA"
+3.bash scripts/test_sub.sh
