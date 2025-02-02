@@ -459,7 +459,11 @@ def evaluate(
     if testloader_open is not None:
         open_acc = eval_data(model_copy, testloader_open, device, "open", batch)
     forget_drop = forget_acc_before - forget_acc
-    Hmean = 2 * forget_drop * remain_acc / (forget_drop + remain_acc)
+    if forget_drop + remain_acc == 0:
+        Hmean = 0.0  # Avoid division by zero
+    else:
+        Hmean = 2 * forget_drop * remain_acc / (forget_drop + remain_acc)
+
 
     # save checkpoints per epoch
     if Hmean > highest_H_mean:

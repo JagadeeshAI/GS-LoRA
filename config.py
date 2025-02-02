@@ -1,116 +1,83 @@
-import torch, os
-import yaml
-from IPython import embed
-
+import torch
+import os
 
 def get_config(args):
     configuration = dict(
-        SEED=1337,  # random seed for reproduce results
-        INPUT_SIZE=[112, 112],  # support: [112, 112] and [224, 224]
-        EMBEDDING_SIZE=512,  # feature dimension
+        SEED=1337,  # Random seed for reproducibility
+        INPUT_SIZE=[112, 112],  # Input image size
+        EMBEDDING_SIZE=512,  # Feature dimension
     )
 
-    if args.workers_id == "cpu" or not torch.cuda.is_available():
-        configuration["GPU_ID"] = []
-        print("check", args.workers_id, torch.cuda.is_available())
+    # ===== 🔥 Force Single-GPU Mode 🔥 ===== #
+    if torch.cuda.is_available():
+        configuration["GPU_ID"] = [0]  # Use only GPU 0
+        configuration["DEVICE"] = torch.device("cuda:0")
+        configuration["MULTI_GPU"] = False  # Disable multi-GPU
+        print(f"✅ Running on GPU: {torch.cuda.get_device_name(0)}")
     else:
-        configuration["GPU_ID"] = [int(i) for i in args.workers_id.split(",")]
-    if len(configuration["GPU_ID"]) == 0:
+        configuration["GPU_ID"] = []  # No GPU detected
         configuration["DEVICE"] = torch.device("cpu")
         configuration["MULTI_GPU"] = False
-    else:
-        configuration["DEVICE"] = torch.device("cuda:%d" % configuration["GPU_ID"][0])
-        if len(configuration["GPU_ID"]) == 1:
-            configuration["MULTI_GPU"] = False
-        else:
-            configuration["MULTI_GPU"] = True
+        print("⚠️ No GPU detected! Running on CPU.")
 
+    # Set training parameters
     configuration["NUM_EPOCH"] = args.epochs
     configuration["BATCH_SIZE"] = args.batch_size
     configuration["WORKERS"] = args.num_workers
 
-    if args.data_mode == "retina":
-        configuration["DATA_ROOT"] = "./Data/ms1m-retinaface-t1/"
-    elif args.data_mode == "casia":
-        configuration["DATA_ROOT"] = "./data/faces_webface_112x112/"
-    elif args.data_mode == "casia100":
-        configuration["DATA_ROOT"] = "./data/faces_webface_112x112_sub100_train_test/"
-    elif args.data_mode == "casia1000":
-        configuration["DATA_ROOT"] = "./data/faces_webface_112x112_sub1000/"
-    elif args.data_mode == "tsne":
-        configuration["DATA_ROOT"] = "./data/faces_Tsne_sub/"
-    elif args.data_mode == "imagenet100":
-        configuration["DATA_ROOT"] = "./data/imagenet100/"
-    else:
-        raise Exception(args.data_mode)
+    # ===== Dataset Selection ===== #
+    dataset_paths = {
+        "retina": "./Data/ms1m-retinaface-t1/",
+        "casia": "./data/faces_webface_112x112/",
+        "casia100": "./data/faces_webface_112x112_sub100_train_test/",
+        "casia1000": "./data/faces_webface_112x112_sub1000/",
+        "tsne": "./data/faces_Tsne_sub/",
+        "imagenet100": "./data/imagenet100/",
+    }
+
+    if args.data_mode not in dataset_paths:
+        raise Exception(f"❌ Unknown dataset mode: {args.data_mode}")
+
+    configuration["DATA_ROOT"] = dataset_paths[args.data_mode]
     configuration["EVAL_PATH"] = "./eval/"
-    assert args.net in ["VIT", "VITs", "VIT_B16"]
+
+    # ===== Model Selection ===== #
+    assert args.net in ["VIT", "VITs", "VIT_B16"], "❌ Invalid network type!"
     configuration["BACKBONE_NAME"] = args.net
-    assert args.head in ["Softmax", "ArcFace", "CosFace", "SFaceLoss"]
+
+    assert args.head in ["Softmax", "ArcFace", "CosFace", "SFaceLoss"], "❌ Invalid head type!"
     configuration["HEAD_NAME"] = args.head
-    # configuration['TARGET'] = [i for i in args.target.split(',')]
 
-    if args.resume:
-        configuration["BACKBONE_RESUME_ROOT"] = args.resume
-    else:
-        configuration["BACKBONE_RESUME_ROOT"] = (
-            ""  # the root to resume training from a saved checkpoint
-        )
-    configuration["WORK_PATH"] = args.outdir  # the root to buffer your checkpoints
-    if not os.path.exists(args.outdir):
-        os.makedirs(args.outdir)
+    # ===== Resume Training Checkpoint ===== #
+    configuration["BACKBONE_RESUME_ROOT"] = args.resume if args.resume else ""
 
-    # if args has attribute 'evaluate', then only evaluate the model
+    # ===== Model Save Path ===== #
+    configuration["WORK_PATH"] = args.outdir
+    os.makedirs(args.outdir, exist_ok=True)
+
+    # ===== Transformer Depth ===== #
     configuration["NUM_LAYERS"] = args.vit_depth
 
-    if (
-        hasattr(args, "one_stage")
-        or hasattr(args, "ewc")
-        or hasattr(args, "MAS")
-        or hasattr(args, "si")
-        or hasattr(args, "online")
-        or hasattr(args, "replay")
-        or hasattr(args, "l2")
-    ):
-        configuration["one_stage"] = args.one_stage
-        configuration["ewc"] = args.ewc
-        configuration["ewc_lambda"] = args.ewc_lambda
-        configuration["MAS"] = args.MAS
-        configuration["mas_lambda"] = args.mas_lambda
-        configuration["si"] = args.si
-        configuration["si_c"] = args.si_c
-        configuration["online"] = args.online
-        configuration["replay"] = args.replay
-        configuration["l2"] = args.l2
+    # ===== Forgetting & Regularization Parameters ===== #
+    advanced_params = [
+        "one_stage", "ewc", "MAS", "si", "online", "replay", "l2",
+        "BND_pro", "few_shot", "grouping", "alpha_epoch", "per_forget_cls",
+        "LIRF_T", "LIRF_alpha", "scrub_decay_epoch"
+    ]
 
-    if hasattr(args, "BND_pro"):
-        configuration["BND_pro"] = args.BND_pro
-    if hasattr(args, "few_shot"):
-        configuration["few_shot"] = args.few_shot
-    
-    if hasattr(args, "grouping"):
-        configuration["GROUP_TYPE"] = args.grouping
+    for param in advanced_params:
+        if hasattr(args, param):
+            configuration[param] = getattr(args, param)
 
-    if hasattr(args, "alpha_epoch"):
-        configuration["ALPHA_EPOCH"] = args.alpha_epoch
+    # 🔥 **Fix KeyError for `ALPHA_EPOCH` 🔥**
+    configuration["ALPHA_EPOCH"] = getattr(args, "alpha_epoch", 0)  # Default to 0 if missing
 
-    if hasattr(args, "per_forget_cls"):
-        configuration["PER_FORGET_CLS"] = args.per_forget_cls
-
-    # parameters for LIRF
-    if hasattr(args, "LIRF_T"):
-        configuration["LIRF_T"] = args.LIRF_T
-    if hasattr(args, "LIRF_alpha"):
-        configuration["LIRF_alpha"] = args.LIRF_alpha
-
-    # parameter for SCRUB
+    # ===== Learning Rate Configuration ===== #
     configuration["lr_decay_rate"] = 0.1
-    if hasattr(args, "scrub_decay_epoch"):
-        configuration["lr_decay_epochs"] = args.scrub_decay_epoch
+    configuration["lr_decay_epochs"] = getattr(args, "scrub_decay_epoch", None)
     configuration["sgda_learning_rate"] = args.lr
 
-    # lora pos
-    if hasattr(args, "lora_pos"):
-        configuration["GROUP_POS"] = args.lora_pos
+    # ===== LoRA Configuration ===== #
+    configuration["GROUP_POS"] = getattr(args, "lora_pos", "FFN")
 
     return configuration

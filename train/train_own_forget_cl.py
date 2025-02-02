@@ -93,7 +93,7 @@ if __name__ == "__main__":
     print("GPU_ID", GPU_ID)
     WORKERS = cfg["WORKERS"]
     print("=" * 60)
-    print("Overall Configurations:")
+    print("Overall Configurations4:")
     print(cfg)
     with open(os.path.join(WORK_PATH, "config.txt"), "w") as f:
         f.write(str(cfg))

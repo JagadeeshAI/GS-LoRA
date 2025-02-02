@@ -1,6 +1,6 @@
-export CUDA_VISIBLE_DEVICES=0,1,2,3,4,5,6,7
+export CUDA_VISIBLE_DEVICES=0
 export PYTHONPATH=$(pwd):$PYTHONPATH
-python3 -u train/train_own.py -b 480 -w 0,1,2,3,4,5,6,7 -d casia100 -n VIT -e 1200 \
+python3 -u train/train_own.py -b 128 -w 0,1,2,3,4,5,6,7 -d casia100 -n VIT -e 1200 \
     -head CosFace --outdir ./results/ViT-P8S8_casia100_cosface_s1-1200-150de-depth12new-bs480 \
     --warmup-epochs 10 --lr 3e-4 --num_workers 8  --lora_rank 0 --decay-epochs 150 \
     --vit_depth 12  

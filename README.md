@@ -24,9 +24,11 @@ prototype regularization $\mathcal{L}_{pro}$. We use the original model to calcu
 
 
 For localy please do this thigs
-1.conda activate gslora2
-2.export PYTHONPATH="$PYTHONPATH:/media/jagadeesh/New Volume/Jagadeesh/GS-LoRA"
-3.bash scripts/test_sub.sh
+1. conda activate gslora2 
+2. export PYTHONPATH="$PYTHONPATH:/media/jagadeesh/New Volume/Jagadeesh/GS-LoRA"
+3. bash scripts/test_sub.sh working for testing
+4. bash scripts/run_sub.sh For trainining the basic pre-trianed heavy model working
+5. bash scripts/run_forget.sh For trainining sinlge step forget on the basic pre-trianed heavy model working
 
 ### Single-step Forgetting
 
