@@ -17,3 +17,6 @@ torchvision==0.15.1
 vit_pytorch==1.2.4
 wandb
 Ipython
+datasets 
+transformers 
+tqdm
