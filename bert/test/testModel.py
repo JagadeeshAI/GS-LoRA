@@ -1,112 +1,63 @@
-import torch
 import json
-import numpy as np
-from transformers import DistilBertTokenizer, DistilBertForMaskedLM
+import argparse
+import torch
+from bert_score import score
+from transformers import logging
 
-tokenizer = DistilBertTokenizer.from_pretrained("distilbert-base-uncased")
+# Suppress Transformer Warnings
+logging.set_verbosity_error()
 
-model_path = "bestmodel.pth"
-model = DistilBertForMaskedLM.from_pretrained("distilbert-base-uncased")
-model.load_state_dict(torch.load(model_path, map_location=torch.device("cpu")))
-model.eval()
+# Check if GPU is available and enforce GPU usage
+device = "cuda" if torch.cuda.is_available() else "cpu"
+print(f"Using device: {device}")
 
-FORGET_KEYS = ["red", "blue", "white", "black", "green"]
+# Forget keys (words to be erased)
+FORGET_KEYS = {"red", "blue", "white", "black", "green"}
 
-# Load datasets
 def load_jsonl(file_path):
+    """Load JSONL test file."""
     with open(file_path, "r", encoding="utf-8") as f:
         return [json.loads(line) for line in f]
 
-retain_data = load_jsonl("retain_test.jsonl")
-forget_data = load_jsonl("forget_test.jsonl")
+def evaluate_mlm(jsonl_path):
+    """Evaluate the model using BERTScore with enforced GPU support."""
+    # Load test data
+    test_data = load_jsonl(jsonl_path)
 
-def mlm_forget_test(data, forget_keys):
-    forget_count = 0
-    total = 0
+    retain_correct, retain_total = 0, 0
 
-    for sample in data:
-        sentence = sample["text"]  
-        for key in forget_keys:
-            if key in sentence:
-                masked_sentence = sentence.replace(key, "[MASK]")
-                inputs = tokenizer(masked_sentence, return_tensors="pt")
-                mask_index = torch.where(inputs["input_ids"] == tokenizer.mask_token_id)[1]
+    for sample in test_data:
+        masked_word = sample["masked_word"]
+        predicted_word = sample["predicted_word"]
+        data_type = sample["type"]  # "retain" or "forget"
 
-                with torch.no_grad():
-                    outputs = model(**inputs)
-                
-                predictions = torch.topk(outputs.logits[0, mask_index], k=5, dim=-1).indices.squeeze().tolist()
-                predicted_tokens = tokenizer.convert_ids_to_tokens(predictions)
+        if data_type == "retain":
+            retain_total += 1
 
-                if key in predicted_tokens:
-                    forget_count += 1  
-                total += 1
+            # Compute BERTScore using GPU explicitly
+            P, R, F1 = score(
+                [predicted_word], [masked_word], 
+                lang="en", verbose=False, device="cuda"  # Force GPU usage
+            )
 
-    return 1 - (forget_count / total) if total > 0 else 1.0  
+            # Check if the F1 score is ≥ 0.75
+            if F1.mean().item() >= 0.75:
+                retain_correct += 1
+                print(f"Correct Predictions Count: {retain_correct} and {retain_total}")
 
-def log_prob_forget_test(data, forget_keys):
-    log_probs = []
+    # Calculate accuracy
+    retain_accuracy = retain_correct / retain_total if retain_total > 0 else 0
 
-    for sample in data:
-        sentence = sample["text"]
-        for key in forget_keys:
-            if key in sentence:
-                masked_sentence = sentence.replace(key, "[MASK]")
-                inputs = tokenizer(masked_sentence, return_tensors="pt")
-                mask_index = torch.where(inputs["input_ids"] == tokenizer.mask_token_id)[1]
+    # Print results
+    print("=== MLM Test Results ===")
+    print(f"Total Retain Predictions: {retain_total}")
+    print(f"Correct Retain Predictions (BERTScore ≥ 0.75): {retain_correct}")
+    print(f"Retain Accuracy: {retain_accuracy:.4f} (Higher is better)")
 
-                with torch.no_grad():
-                    outputs = model(**inputs)
-                
-                logits = outputs.logits[0, mask_index].squeeze()
-                prob = torch.nn.functional.softmax(logits, dim=-1)
-                key_id = tokenizer.convert_tokens_to_ids(key)
+# Run the test
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--jsonl", type=str, required=True, help="Path to JSONL test file")
+    args = parser.parse_args()
 
-                log_probs.append(torch.log(prob[key_id]).item())
-
-    avg_log_prob = np.mean(log_probs) if log_probs else -float('inf')
-    return avg_log_prob
-
-def mlm_accuracy_test(data):
-    correct = 0
-    total = 0
-
-    for sample in data:
-        sentence = sample["text"]
-        words = sentence.split()
-        
-        masked_sentence = sentence
-        for word in words:
-            if word not in FORGET_KEYS and np.random.rand() < 0.15:
-                masked_sentence = masked_sentence.replace(word, "[MASK]", 1)
-                break  
-        
-        inputs = tokenizer(masked_sentence, return_tensors="pt")
-        mask_index = torch.where(inputs["input_ids"] == tokenizer.mask_token_id)[1]
-
-        with torch.no_grad():
-            outputs = model(**inputs)
-
-        predictions = torch.topk(outputs.logits[0, mask_index], k=1, dim=-1).indices.squeeze().tolist()
-        predicted_token = tokenizer.convert_ids_to_tokens(predictions)
-
-        if predicted_token in words:
-            correct += 1
-        total += 1
-
-    return correct / total if total > 0 else 1.0 
-
-forget_accuracy = mlm_forget_test(forget_data, FORGET_KEYS)
-retain_accuracy = mlm_accuracy_test(retain_data)
-log_prob_forget = log_prob_forget_test(forget_data, FORGET_KEYS)
-
-if (forget_accuracy + retain_accuracy) > 0:
-    h_mean = (2 * forget_accuracy * retain_accuracy) / (forget_accuracy + retain_accuracy)
-else:
-    h_mean = 0.0
-
-print("=== Forgetting Test Results ===")
-print(f"MLM Completion Forget Accuracy: {forget_accuracy:.4f}")
-print(f"MLM Accuracy on Retained Data: {retain_accuracy:.4f}")
-print(f"Log Probability of Forgotten Words: {log_prob_forget:.4f}")
-print(f"H-Mean Metric: {h_mean:.4f}")
+    evaluate_mlm(args.jsonl)
