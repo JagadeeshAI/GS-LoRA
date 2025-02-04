@@ -2,7 +2,9 @@ import os
 import pickle
 import torch
 import numpy as np
+from datetime import datetime
 from tqdm.auto import tqdm
+
 try:
     from transformers.trainer_utils import TrainerControl
 except ImportError:
@@ -33,7 +35,7 @@ def compute_metrics(eval_pred):
 
 class EmptyCacheCallback(TrainerCallback):
     """
-    A custom callback that clears the CUDA cache at the end of each training step.
+    A callback that clears the CUDA cache at the end of each training step.
     """
     def on_step_end(self, args, state, control, **kwargs):
         torch.cuda.empty_cache()
@@ -42,9 +44,9 @@ class EmptyCacheCallback(TrainerCallback):
 
 class DiskFlushTrainer(Trainer):
     """
-    A custom Trainer subclass that, during evaluation, writes intermediate predictions
-    and labels to disk when GPU memory usage exceeds a set threshold. The evaluation
-    loop is wrapped with tqdm so that a progress bar is shown.
+    A custom Trainer subclass that, during evaluation, flushes intermediate predictions
+    and labels to disk when GPU memory usage exceeds a threshold.
+    The evaluation loop is wrapped with tqdm to display a progress bar.
     """
     def evaluate(self, eval_dataset=None, ignore_keys=None, metric_key_prefix: str = "eval"):
         # Create a temporary directory for flush files.
@@ -142,6 +144,34 @@ class DiskFlushTrainer(Trainer):
         metrics = {}
         if self.compute_metrics is not None and combined_preds is not None and combined_labels is not None:
             metrics = self.compute_metrics((combined_preds.numpy(), combined_labels.numpy()))
-        # Reset Trainer control to avoid errors.
+        # Reset Trainer control.
         self.control = TrainerControl()
         return metrics
+
+
+class SaveBestModelCallback(TrainerCallback):
+    """
+    A callback that monitors the evaluation metric and, if a new best model is found,
+    saves the model's state dictionary to a file.
+    If no output directory is provided in the callback, it uses args.output_dir.
+    The file is named with the current timestamp (e.g. "best_model_20230426_153045.pth").
+    """
+    def __init__(self, monitor: str = "eval_accuracy", output_dir=None):
+        self.monitor = monitor
+        self.best_metric = None
+        self.output_dir = output_dir
+
+    def on_evaluate(self, args, state, control, metrics=None, **kwargs):
+        if metrics is None or self.monitor not in metrics:
+            return control
+
+        current_metric = metrics[self.monitor]
+        # Save model if this evaluation metric is better than the previous best.
+        if self.best_metric is None or current_metric > self.best_metric:
+            self.best_metric = current_metric
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            output_dir = self.output_dir if self.output_dir is not None else args.output_dir
+            save_path = os.path.join(output_dir, f"best_model_{timestamp}.pth")
+            torch.save(kwargs["model"].state_dict(), save_path)
+            print(f"New best model saved to {save_path} with {self.monitor}: {current_metric}")
+        return control

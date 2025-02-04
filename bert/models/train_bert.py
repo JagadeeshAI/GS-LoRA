@@ -5,14 +5,12 @@ from datetime import datetime
 import wandb
 import torch
 from torch.optim import AdamW
-# IMPORTANT: use torch.amp instead of torch.cuda.amp
 from torch.amp import autocast, GradScaler
 
 from transformers import DistilBertForMaskedLM
 from peft import LoraConfig, get_peft_model
 from data.setup_corpus_data import get_retain_dataloader
 from tqdm.auto import tqdm
-import numpy as np
 
 def compute_metrics(logits, labels):
     """
@@ -27,15 +25,11 @@ def compute_metrics(logits, labels):
     correct = (predictions[mask] == labels[mask]).sum().item()
     return correct / total
 
-# -------------------------------
-# Setup wandb
-# -------------------------------
+
 wandb.login()
 wandb.init(project="bert_finetune_project", name="custom_bert_finetune_run")
 
-# -------------------------------
-# Load Model and Configure LoRA
-# -------------------------------
+
 model = DistilBertForMaskedLM.from_pretrained("distilbert-base-uncased")
 model.gradient_checkpointing_enable()
 
@@ -51,17 +45,11 @@ model = get_peft_model(model, lora_config)
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 model.to(device)
 
-# -------------------------------
-# Prepare Data
-# -------------------------------
-train_dataloader = get_retain_dataloader(batch_size=128, train=True)
-val_dataloader = get_retain_dataloader(batch_size=8, train=False)
 
-# -------------------------------
-# Setup Optimizer, GradScaler, and Hyperparameters
-# -------------------------------
+train_dataloader = get_retain_dataloader(batch_size=128, train=True)
+
+
 optimizer = AdamW(model.parameters(), lr=5e-5)
-# Updated usage (no warnings):
 scaler = GradScaler()
 
 num_epochs = 30
@@ -71,7 +59,6 @@ output_dir = "/media/jagadeesh/New Volume/Jagadeesh/GS-LoRA/bert/results"
 os.makedirs(output_dir, exist_ok=True)
 
 global_step = 0
-best_val_loss = float('inf')
 running_loss = 0.0
 
 start_time = time.time()
@@ -84,9 +71,7 @@ for epoch in range(num_epochs):
     epoch_iterator = tqdm(train_dataloader, desc=f"Training Epoch {epoch+1}", leave=False)
     
     for step, batch in enumerate(epoch_iterator):
-        # Move batch tensors to device.
         batch = {k: v.to(device) for k, v in batch.items()}
-        # Use autocast with device_type='cuda'
         with autocast(device_type='cuda'):
             outputs = model(**batch)
             loss = outputs.loss
@@ -107,36 +92,10 @@ for epoch in range(num_epochs):
                 wandb.log({"train_loss": avg_loss, "global_step": global_step})
                 epoch_iterator.set_postfix(train_loss=avg_loss)
     
-    # -------------------------------
-    # End-of-Epoch: Validate Model
-    # -------------------------------
-    model.eval()
-    val_loss_total = 0.0
-    val_steps = 0
-    all_logits = []
-    all_labels = []
-    with torch.no_grad():
-        for val_batch in tqdm(val_dataloader, desc="Validation", leave=False):
-            val_batch = {k: v.to(device) for k, v in val_batch.items()}
-            with autocast(device_type='cuda'):
-                outputs = model(**val_batch)
-                loss_val = outputs.loss
-            val_loss_total += loss_val.item()
-            val_steps += 1
-            all_logits.append(outputs.logits.cpu())
-            all_labels.append(val_batch["labels"].cpu())
-    
-    avg_val_loss = val_loss_total / val_steps
-    wandb.log({"val_loss": avg_val_loss, "epoch": epoch+1})
-    print(f"Epoch {epoch+1}: Average Validation Loss = {avg_val_loss:.4f}")
-    
-    # Save the model if the current validation loss is lower than the best seen so far.
-    if avg_val_loss < best_val_loss:
-        best_val_loss = avg_val_loss
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        save_path = os.path.join(output_dir, f"data_{timestamp}.pth")
-        torch.save(model.state_dict(), save_path)
-        print(f"New best model saved to {save_path} with val_loss = {avg_val_loss:.4f}")
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    save_path = os.path.join(output_dir, f"bestmodel_{timestamp}.pth")
+    torch.save(model.state_dict(), save_path)
+    print(f"Model saved to {save_path} after Epoch {epoch+1}")
 
 total_time = time.time() - start_time
 print(f"Training completed in {total_time/60:.2f} minutes.")

@@ -9,10 +9,13 @@ from datasets import load_dataset
 from transformers import DistilBertTokenizer
 
 # File paths and constants
-DATA_FOLDER = "bert/data/"
-TRAIN_FILE = os.path.join(DATA_FOLDER, "retain_train.jsonl")
+DATA_FOLDER = "/media/jagadeesh/New Volume/Jagadeesh/GS-LoRA/bert/data/"
+
+
+
+TRAIN_FILE = os.path.join(DATA_FOLDER, "retain_trian.jsonl")
 VALID_FILE = os.path.join(DATA_FOLDER, "retain_valid.jsonl")
-TEST_FILE = os.path.join(DATA_FOLDER, "retain_valid.jsonl")
+TEST_FILE = os.path.join(DATA_FOLDER, "retain_test.jsonl")
 TRAIN_SIZE = 50000
 VALID_SIZE = 7500
 
