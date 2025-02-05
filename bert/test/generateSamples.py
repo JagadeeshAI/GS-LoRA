@@ -36,7 +36,7 @@ def load_jsonl(file_path):
     with open(file_path, "r", encoding="utf-8") as f:
         return [json.loads(line) for line in f]
 
-test_data = load_jsonl("/media/jagadeesh/New Volume/Jagadeesh/GS-LoRA/bert/data/retain_test.jsonl")
+test_data = load_jsonl("/media/jagadeesh/New Volume/Jagadeesh/GS-LoRA/bert/data/test.jsonl")
 
 # Function to mask a word in a sentence
 def mask_sentence(sentence):
