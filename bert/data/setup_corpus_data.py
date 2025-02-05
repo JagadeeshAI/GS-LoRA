@@ -12,7 +12,6 @@ from transformers import DistilBertTokenizer
 DATA_FOLDER = "/media/jagadeesh/New Volume/Jagadeesh/GS-LoRA/bert/data/"
 
 
-
 TRAIN_FILE = os.path.join(DATA_FOLDER, "retain_trian.jsonl")
 VALID_FILE = os.path.join(DATA_FOLDER, "retain_valid.jsonl")
 TEST_FILE = os.path.join(DATA_FOLDER, "retain_test.jsonl")
@@ -76,7 +75,7 @@ def process_bookcorpus():
                         valid_writer.write({"text": sentence_text})
                         valid_count += 1
 
-    print(f"✅ Saved {train_count} training and {valid_count} validation sentences")
+    print(f" Saved {train_count} training and {valid_count} validation sentences")
 
 
 class RetainDataset(Dataset):

@@ -1,16 +1,13 @@
 import os
 import time
 from datetime import datetime
-
 import wandb
 import torch
 from torch.optim import AdamW
 from torch.amp import autocast, GradScaler
-
-from transformers import DistilBertForMaskedLM
-from peft import LoraConfig, get_peft_model
 from data.setup_corpus_data import get_retain_dataloader
 from tqdm.auto import tqdm
+from lora.basiclora import load_lora_model  
 
 def compute_metrics(logits, labels):
     """
@@ -25,33 +22,21 @@ def compute_metrics(logits, labels):
     correct = (predictions[mask] == labels[mask]).sum().item()
     return correct / total
 
-
+# Initialize WandB
 wandb.login()
 wandb.init(project="bert_finetune_project", name="custom_bert_finetune_run")
 
+# Load LoRA Model
+model, device = load_lora_model()
 
-model = DistilBertForMaskedLM.from_pretrained("distilbert-base-uncased")
-model.gradient_checkpointing_enable()
-
-lora_config = LoraConfig(
-    r=16,
-    lora_alpha=32,
-    lora_dropout=0.1,
-    bias="none",
-    task_type="TOKEN_CLS",  # Token-level predictions
-    target_modules=["q_lin", "v_lin"]
-)
-model = get_peft_model(model, lora_config)
-device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-model.to(device)
-
-
+# Load Dataset
 train_dataloader = get_retain_dataloader(batch_size=128, train=True)
 
-
+# Optimizer & Gradient Scaler
 optimizer = AdamW(model.parameters(), lr=5e-5)
 scaler = GradScaler()
 
+# Training Setup
 num_epochs = 30
 logging_steps = 100
 gradient_accumulation_steps = 2
@@ -60,7 +45,6 @@ os.makedirs(output_dir, exist_ok=True)
 
 global_step = 0
 running_loss = 0.0
-
 start_time = time.time()
 
 for epoch in range(num_epochs):
@@ -92,6 +76,7 @@ for epoch in range(num_epochs):
                 wandb.log({"train_loss": avg_loss, "global_step": global_step})
                 epoch_iterator.set_postfix(train_loss=avg_loss)
     
+    # Save Model After Each Epoch
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     save_path = os.path.join(output_dir, f"bestmodel_{timestamp}.pth")
     torch.save(model.state_dict(), save_path)
